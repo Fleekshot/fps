@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web FPS Prototype</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; }
+        #ui { position: absolute; top: 10px; left: 10px; color: white; font-family: sans-serif; z-index: 1; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 8px; height: 8px; margin-left: -4px; margin-top: -4px; border: 2px solid white; border-radius: 50%; z-index: 1; }
+        #startButton { padding: 8px 16px; }
+    </style>
+</head>
+<body>
+<div id="ui">
+    <div>Ammo: <span id="ammo">10</span></div>
+    <button id="startButton">Click to Start</button>
+</div>
+<div id="crosshair"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/controls/PointerLockControls.js"></script>
+<script>
+let camera, scene, renderer, controls;
+let objects = [];
+let raycaster;
+let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+let canJump = false;
+let velocity = new THREE.Vector3();
+let direction = new THREE.Vector3();
+let ammo = 10;
+const maxAmmo = 10;
+let reloading = false;
+const reloadTime = 1.2; // seconds
+const ammoUI = document.getElementById('ammo');
+const startButton = document.getElementById('startButton');
+
+init();
+animate();
+
+function init() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x202020);
+
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 1000);
+
+    // lights
+    const light = new THREE.HemisphereLight(0xffffff, 0x444444);
+    light.position.set(0, 200, 0);
+    scene.add(light);
+
+    const light2 = new THREE.DirectionalLight(0xffffff);
+    light2.position.set(0, 200, 100);
+    scene.add(light2);
+
+    // floor
+    const floorGeometry = new THREE.PlaneGeometry(200, 200, 10, 10);
+    floorGeometry.rotateX(-Math.PI / 2);
+    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x808080 });
+    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    scene.add(floor);
+
+    // obstacles
+    const boxGeo = new THREE.BoxGeometry(5, 5, 5);
+    const boxMat = new THREE.MeshStandardMaterial({ color: 0x999999 });
+    for (let i = 0; i < 10; i++) {
+        const box = new THREE.Mesh(boxGeo, boxMat);
+        box.position.set((Math.random() - 0.5) * 100, 2.5, (Math.random() - 0.5) * 100);
+        scene.add(box);
+        objects.push(box);
+    }
+
+    // targets
+    const targetMat = new THREE.MeshStandardMaterial({ color: 0xff5555 });
+    for (let i = 0; i < 5; i++) {
+        const target = new THREE.Mesh(boxGeo, targetMat);
+        target.position.set((Math.random() - 0.5) * 80, 2.5, (Math.random() - 0.5) * 80);
+        target.userData.health = 30;
+        target.userData.isTarget = true;
+        scene.add(target);
+        objects.push(target);
+    }
+
+    raycaster = new THREE.Raycaster();
+
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    controls = new THREE.PointerLockControls(camera, document.body);
+    scene.add(controls.getObject());
+
+    startButton.addEventListener('click', function() {
+        controls.lock();
+    });
+
+    controls.addEventListener('lock', function() {
+        startButton.style.display = 'none';
+    });
+    controls.addEventListener('unlock', function() {
+        startButton.style.display = '';
+    });
+
+    const onKeyDown = function(event) {
+        switch (event.code) {
+            case 'ArrowUp':
+            case 'KeyW':
+                moveForward = true;
+                break;
+            case 'ArrowLeft':
+            case 'KeyA':
+                moveLeft = true;
+                break;
+            case 'ArrowDown':
+            case 'KeyS':
+                moveBackward = true;
+                break;
+            case 'ArrowRight':
+            case 'KeyD':
+                moveRight = true;
+                break;
+            case 'Space':
+                if (canJump === true) velocity.y += 10;
+                canJump = false;
+                break;
+            case 'KeyR':
+                if (!reloading && ammo < maxAmmo) reload();
+                break;
+        }
+    };
+    const onKeyUp = function(event) {
+        switch (event.code) {
+            case 'ArrowUp':
+            case 'KeyW':
+                moveForward = false;
+                break;
+            case 'ArrowLeft':
+            case 'KeyA':
+                moveLeft = false;
+                break;
+            case 'ArrowDown':
+            case 'KeyS':
+                moveBackward = false;
+                break;
+            case 'ArrowRight':
+            case 'KeyD':
+                moveRight = false;
+                break;
+        }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp);
+    document.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('resize', onWindowResize);
+
+    // simple weapon model (a small box in front of camera)
+    const weaponGeo = new THREE.BoxGeometry(0.3, 0.3, 1);
+    const weaponMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+    const weapon = new THREE.Mesh(weaponGeo, weaponMat);
+    weapon.position.set(0.5, -0.5, -1);
+    camera.add(weapon);
+}
+
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function onMouseDown(event) {
+    if (document.pointerLockElement !== document.body) return;
+    if (reloading) return;
+    if (ammo <= 0) {
+        reload();
+        return;
+    }
+    ammo--;
+    ammoUI.textContent = ammo;
+    shoot();
+}
+
+function reload() {
+    reloading = true;
+    setTimeout(() => {
+        ammo = maxAmmo;
+        ammoUI.textContent = ammo;
+        reloading = false;
+    }, reloadTime * 1000);
+}
+
+function shoot() {
+    // muzzle flash
+    const flashGeo = new THREE.SphereGeometry(0.1, 8, 8);
+    const flashMat = new THREE.MeshBasicMaterial({ color: 0xffffaa });
+    const flash = new THREE.Mesh(flashGeo, flashMat);
+    flash.position.copy(camera.position);
+    scene.add(flash);
+    setTimeout(() => scene.remove(flash), 50);
+
+    // hit detection
+    raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+    const hits = raycaster.intersectObjects(objects, false);
+    if (hits.length > 0) {
+        const obj = hits[0].object;
+        spawnImpact(hits[0].point);
+        if (obj.userData && obj.userData.isTarget) {
+            obj.userData.health -= 10;
+            if (obj.userData.health <= 0) {
+                scene.remove(obj);
+                objects.splice(objects.indexOf(obj), 1);
+            }
+        }
+    }
+}
+
+function spawnImpact(point) {
+    const geo = new THREE.SphereGeometry(0.15, 8, 8);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const impact = new THREE.Mesh(geo, mat);
+    impact.position.copy(point);
+    scene.add(impact);
+    setTimeout(() => scene.remove(impact), 300);
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+
+    if (controls.isLocked === true) {
+        const delta = 0.1;
+        velocity.x -= velocity.x * 10.0 * delta;
+        velocity.z -= velocity.z * 10.0 * delta;
+        velocity.y -= 9.8 * 5.0 * delta; // basic gravity
+
+        direction.z = Number(moveForward) - Number(moveBackward);
+        direction.x = Number(moveRight) - Number(moveLeft);
+        direction.normalize();
+
+        if (moveForward || moveBackward) velocity.z -= direction.z * 50.0 * delta;
+        if (moveLeft || moveRight) velocity.x -= direction.x * 50.0 * delta;
+
+        controls.moveRight(-velocity.x * delta);
+        controls.moveForward(-velocity.z * delta);
+
+        controls.getObject().position.y += velocity.y * delta;
+        if (controls.getObject().position.y < 2) {
+            velocity.y = 0;
+            controls.getObject().position.y = 2;
+            canJump = true;
+        }
+    }
+
+    renderer.render(scene, camera);
+}
+</script>
+</body>
+</html>

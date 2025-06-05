@@ -35,3 +35,8 @@ This setup provides a solid foundation for a first-person shooter prototype. You
 5. Optionally bake lighting to achieve smoother shadows and performance in static areas.
 
 By following these steps and using the included scripts, you will have a basic FPS sandbox environment ready for further expansion.
+
+## Web Version
+A simple browser-based demo is provided in `index.html`. Open this file in any modern WebGL-enabled browser. Use `WASD` to move, the mouse to look around, and click to shoot.
+Reload with `R` when you run out of ammo. Targets are red cubes that can be destroyed.
+For the pointer lock controls to work correctly, you may need to serve the file via a local web server (e.g., `npx serve`).
