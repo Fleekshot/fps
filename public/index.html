@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Mini Platformer</title>
+  <style>
+    body { margin:0; overflow:hidden; font-family:sans-serif; }
+    #ui { position:absolute; top:10px; left:10px; color:white; background:rgba(0,0,0,0.5); padding:5px; }
+    canvas { background:#87ceeb; display:block; }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <input id="username" placeholder="Username" />
+    <button id="join">Join Game</button>
+    <p>Arrows to move, Up to jump. B place block, right click remove, R place vine, Q shoot.</p>
+  </div>
+  <canvas id="game"></canvas>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>
